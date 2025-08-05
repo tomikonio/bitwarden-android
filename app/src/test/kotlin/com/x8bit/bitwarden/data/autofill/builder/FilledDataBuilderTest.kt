@@ -451,6 +451,175 @@ class FilledDataBuilderTest {
             }
         }
 
+    @Suppress("MaxLineLength")
+    @Test
+    fun `build should skip empty username values and only fill password when Login cipher has empty username`() =
+        runTest {
+            // Setup
+            val password = "Password"
+            val emptyUsername = ""
+            val autofillCipher = AutofillCipher.Login(
+                cipherId = null,
+                name = "Cipher One",
+                isTotpEnabled = false,
+                password = password,
+                username = emptyUsername, // Empty username - should not create FilledItem
+                subtitle = "Subtitle",
+            )
+            val filledItemPassword: FilledItem = mockk()
+            val autofillViewPassword: AutofillView.Login.Password = mockk {
+                every { buildFilledItemOrNull(password) } returns filledItemPassword
+            }
+            val autofillViewUsername: AutofillView.Login.Username = mockk()
+            val autofillPartition = AutofillPartition.Login(
+                views = listOf(
+                    autofillViewPassword,
+                    autofillViewUsername,
+                ),
+            )
+            val ignoreAutofillIds: List<AutofillId> = mockk()
+            val autofillRequest = AutofillRequest.Fillable(
+                ignoreAutofillIds = ignoreAutofillIds,
+                inlinePresentationSpecs = emptyList(),
+                maxInlineSuggestionsCount = 0,
+                packageName = null,
+                partition = autofillPartition,
+                uri = URI,
+            )
+            val filledPartition = FilledPartition(
+                autofillCipher = autofillCipher,
+                filledItems = listOf(
+                    filledItemPassword, // Only password should be filled, no username
+                ),
+                inlinePresentationSpec = null,
+            )
+            val expected = FilledData(
+                filledPartitions = listOf(
+                    filledPartition,
+                ),
+                ignoreAutofillIds = ignoreAutofillIds,
+                originalPartition = autofillPartition,
+                uri = URI,
+                vaultItemInlinePresentationSpec = null,
+                isVaultLocked = false,
+            )
+            coEvery {
+                autofillCipherProvider.getLoginAutofillCiphers(
+                    uri = URI,
+                )
+            } returns listOf(autofillCipher)
+
+            // Test
+            val actual = filledDataBuilder.build(
+                autofillRequest = autofillRequest,
+            )
+
+            // Verify
+            assertEquals(expected, actual)
+            coVerify(exactly = 1) {
+                autofillCipherProvider.getLoginAutofillCiphers(
+                    uri = URI,
+                )
+            }
+            verify(exactly = 1) {
+                autofillViewPassword.buildFilledItemOrNull(password)
+            }
+            // Verify that buildFilledItemOrNull was never called on the username view
+            // because the username was empty
+            verify(exactly = 0) {
+                autofillViewUsername.buildFilledItemOrNull(any())
+            }
+        }
+
+    @Suppress("MaxLineLength")
+    @Test
+    fun `build should skip empty card fields and only fill non-empty ones when Card cipher has empty fields`() =
+        runTest {
+            // Setup
+            val code = ""
+            val expirationMonth = "January"
+            val expirationYear = ""
+            val number = "1234567890"
+            val autofillCipher = AutofillCipher.Card(
+                cardholderName = "John",
+                cipherId = null,
+                code = code, // Empty - should not create FilledItem
+                expirationMonth = expirationMonth,
+                expirationYear = expirationYear, // Empty - should not create FilledItem
+                name = "Cipher One",
+                number = number,
+                subtitle = "Subtitle",
+            )
+            val filledItemExpirationMonth: FilledItem = mockk()
+            val filledItemNumber: FilledItem = mockk()
+            val autofillViewCode: AutofillView.Card.SecurityCode = mockk()
+            val autofillViewExpirationMonth: AutofillView.Card.ExpirationMonth = mockk {
+                every { buildFilledItemOrNull(expirationMonth) } returns filledItemExpirationMonth
+            }
+            val autofillViewExpirationYear: AutofillView.Card.ExpirationYear = mockk()
+            val autofillViewNumber: AutofillView.Card.Number = mockk {
+                every { buildFilledItemOrNull(number) } returns filledItemNumber
+            }
+            val autofillPartition = AutofillPartition.Card(
+                views = listOf(
+                    autofillViewCode,
+                    autofillViewExpirationMonth,
+                    autofillViewExpirationYear,
+                    autofillViewNumber,
+                ),
+            )
+            val ignoreAutofillIds: List<AutofillId> = mockk()
+            val autofillRequest = AutofillRequest.Fillable(
+                ignoreAutofillIds = ignoreAutofillIds,
+                inlinePresentationSpecs = emptyList(),
+                maxInlineSuggestionsCount = 0,
+                packageName = null,
+                partition = autofillPartition,
+                uri = URI,
+            )
+            val filledPartition = FilledPartition(
+                autofillCipher = autofillCipher,
+                filledItems = listOf(
+                    filledItemExpirationMonth, // Only non-empty fields should be filled
+                    filledItemNumber,
+                ),
+                inlinePresentationSpec = null,
+            )
+            val expected = FilledData(
+                filledPartitions = listOf(
+                    filledPartition,
+                ),
+                ignoreAutofillIds = ignoreAutofillIds,
+                originalPartition = autofillPartition,
+                uri = URI,
+                vaultItemInlinePresentationSpec = null,
+                isVaultLocked = false,
+            )
+            coEvery {
+                autofillCipherProvider.getCardAutofillCiphers()
+            } returns listOf(autofillCipher)
+
+            // Test
+            val actual = filledDataBuilder.build(
+                autofillRequest = autofillRequest,
+            )
+
+            // Verify
+            assertEquals(expected, actual)
+            coVerify(exactly = 1) {
+                autofillCipherProvider.getCardAutofillCiphers()
+            }
+            verify(exactly = 1) {
+                autofillViewExpirationMonth.buildFilledItemOrNull(expirationMonth)
+                autofillViewNumber.buildFilledItemOrNull(number)
+            }
+            // Verify that buildFilledItemOrNull was never called on empty fields
+            verify(exactly = 0) {
+                autofillViewCode.buildFilledItemOrNull(any())
+                autofillViewExpirationYear.buildFilledItemOrNull(any())
+            }
+        }
+
     companion object {
         private const val URI: String = "androidapp://com.x8bit.bitwarden"
     }
